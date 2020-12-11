@@ -34,10 +34,10 @@ class QueryParam(KeyValuePair):
 
 
 class WebhookBase(BaseModel):
-	url: str = None
-	httpMethod: HttpMethodEnum = None
-	headers: Optional[List[Header]] = None
-	queryParams: Optional[List[QueryParam]] = None
+	url: str
+	httpMethod: HttpMethodEnum
+	headers: Optional[List[Header]] = []
+	queryParams: Optional[List[QueryParam]] = []
 	body: Optional[str] = None
 
 

@@ -2,10 +2,9 @@ import logging
 from uuid import UUID
 
 import requests
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import NoResultFound
 
 from app.model.webhook_model import Webhook, StatusEnum
 from app.schemas.webhook_schema import WebhookCreate, HttpMethodEnum, WebhookGet, Header, WebhookCreateResponse
@@ -21,7 +20,6 @@ class WebhookService:
 	def create_webhook_job(self, webhook_create: WebhookCreate):
 		session = SessionLocal()
 		try:
-			# TODO: Validate input
 			flattened_headers = [f"{header.key}:{header.value}" for header in webhook_create.headers]
 			flattened_query_params = [f"{header.key}:{header.value}" for header in webhook_create.queryParams]
 			joined_headers = ";".join(flattened_headers)
@@ -38,7 +36,7 @@ class WebhookService:
 			session.commit()
 
 			return WebhookCreateResponse(id=webhook.id, status=webhook.status, createdAt=webhook.created_at)
-		except Exception:
+		except Exception as e:
 			session.rollback()
 			raise ApiException(500, "Error while creating webhook")
 		finally:
@@ -46,7 +44,10 @@ class WebhookService:
 
 	def get_webhook(self, id: UUID):
 
-		webhook = SessionLocal().query(Webhook).filter(Webhook.id == id).one()
+		try:
+			webhook = SessionLocal().query(Webhook).filter(Webhook.id == id).one()
+		except NoResultFound:
+			raise ResourceNotFoundException("Webhook not found")
 
 		if webhook:
 			headers = []

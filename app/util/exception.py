@@ -1,3 +1,4 @@
+import logging
 import traceback
 
 from flask import jsonify
@@ -49,3 +50,16 @@ class ForbiddenException(ApiException):
     def __init__(self, message):
         ApiException.__init__(self, 403, message)
 
+
+def handle_api_exception(err):
+    tb = traceback.format_exc()
+    logging.error(tb)
+    response = jsonify(err.__dict__)
+    return response, err.status_code
+
+
+def handle_exception(o):
+    tb = traceback.format_exc()
+    logging.error(tb)
+    response_exception = InternalServerException("Internal Server Error")
+    return jsonify(response_exception.__dict__), response_exception.status_code
