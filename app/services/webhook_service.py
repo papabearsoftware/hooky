@@ -79,8 +79,8 @@ class WebhookService:
 					where status = 'READY'
 					or (
 						status = 'ERROR'
-						and run_count < {max_webhook_error_count}
-						and DATE_PART('second', current_timestamp - created_at) > pow(2, run_count)
+						and run_count <= {max_webhook_error_count}
+						and EXTRACT(EPOCH FROM (current_timestamp - created_at)) > pow(2, run_count)
 					)
 				""")
 				webhook_surrogate_ids = [w[0] for w in result]
@@ -157,11 +157,8 @@ class WebhookService:
 			r = requests.put(webhook.url, headers=headers, params=query_param_dict, data=webhook.body, timeout=timeout)
 			status_code = r.status_code
 		elif webhook.http_method == HttpMethodEnum.DELETE:
-			logging.info('deleting')
 			r = requests.delete(webhook.url, headers=headers, params=query_param_dict, timeout=timeout)
-			logging.info('deleting done')
 			status_code = r.status_code
-			logging.info(f'with status {status_code}')
 		else:
 			raise NotImplementedError
 
