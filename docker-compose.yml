@@ -1,0 +1,37 @@
+version: '3'
+
+services:
+  webhook-api:
+    build: .
+    volumes:
+      - ./:/usr/src/app
+    ports:
+      - 5001:5000
+    environment:
+      POSTGRES_HOST: db
+      RUN_ASYNC_JOBS: "False"
+  worker-1:
+    build: .
+    volumes:
+      - ./:/usr/src/app
+    environment:
+      POSTGRES_HOST: db
+      RUN_ASYNC_JOBS: "True"
+  worker-2:
+    build: .
+    volumes:
+      - ./:/usr/src/app
+    environment:
+      POSTGRES_HOST: db
+      RUN_ASYNC_JOBS: "True"
+  db:
+    build: ./db
+    restart: always
+    volumes:
+      - ./db/pg-data/:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: P0stGr3$$
+      POSTGRES_USER: postgres
+      POSTGRES_DB: hooky
+    ports:
+      - 5432:5432
