@@ -26,4 +26,4 @@ def add_webhook(webhook_service: WebhookService):
 @inject
 def get_webhook(webhook_service: WebhookService, id: UUID):
 	webhook_get = webhook_service.get_webhook(id)
-	return webhook_get.json()
+	return webhook_get.json(), 200

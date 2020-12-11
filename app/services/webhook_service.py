@@ -1,9 +1,10 @@
 import logging
+import random
+import traceback
+from datetime import datetime
 from uuid import UUID
 
 import requests
-from sqlalchemy.engine import Engine, create_engine
-from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
 from app.model.webhook_model import Webhook, StatusEnum
@@ -69,72 +70,71 @@ class WebhookService:
 
 	def process_ready_webhooks(self):
 		logging.info("Starting run_next_available_webhook")
-		session, engine = self.get_session_and_engine()
+		session = SessionLocal()
 		timeout, max_webhook_error_count = settings.REQUEST_TIMEOUT, settings.MAX_WEBHOOK_ERROR_COUNT
-		with engine.connect() as connection:
-			with connection.begin():
-				result = connection.execute(f"""
-					select surrogate_id
-					from webhook
-					where status = 'READY'
-					or (
-						status = 'ERROR'
-						and run_count <= {max_webhook_error_count}
-						and EXTRACT(EPOCH FROM (current_timestamp - created_at)) > pow(2, run_count)
-					)
-				""")
-				webhook_surrogate_ids = [w[0] for w in result]
-				for surrogate_id in webhook_surrogate_ids:
-					if WebhookService.attempt_webhook_lock(surrogate_id, connection):
-						logging.info(f"processing webhook {surrogate_id}")
-						webhook = session.query(Webhook).filter(Webhook.surrogate_id == surrogate_id).one()
-						if webhook.status not in [StatusEnum.READY, StatusEnum.ERROR]:
-							logging.info(f"webhook: {surrogate_id} no longer ready")
-						else:
-							response_code = None
-							try:
-								response_code = self.perform_request(webhook, timeout)
-								status = 'FINISHED' if 200 <= response_code < 300 else 'ERROR'
-							except Exception as e:
-								logging.error(f"Error while performing request: {e}")
-								status = 'ERROR'
+		try:
+			result = session.execute(f"""
+				select surrogate_id
+				from webhook
+				where status = 'READY'
+				or (
+					status = 'ERROR'
+					and run_count <= {max_webhook_error_count}
+					and EXTRACT(EPOCH FROM (current_timestamp - updated_at)) > pow(2, run_count)
+				)
+			""")
+			webhook_surrogate_ids = [w[0] for w in result]
+			random.shuffle(webhook_surrogate_ids)
+			for surrogate_id in webhook_surrogate_ids:
+				if WebhookService.attempt_webhook_lock(surrogate_id, session):
+					logging.info(f"processing webhook {surrogate_id}")
+					webhook = session.query(Webhook).filter(Webhook.surrogate_id == surrogate_id).one()
+					if webhook.status not in [StatusEnum.READY, StatusEnum.ERROR]:
+						logging.info(f"webhook: {surrogate_id} no longer ready")
+					else:
+						response_code = None
+						try:
+							response_code = self.perform_request(webhook, timeout)
+							status = 'FINISHED' if 200 <= response_code < 300 else 'ERROR'
+						except Exception as e:
+							logging.error(f"Error while performing request: {e}")
+							status = 'ERROR'
 
-							try:
-								if response_code:
-									connection.execute(f"""
-										update webhook
-										set
-											status = '{status}',
-											updated_at = current_timestamp,
-											response_code = {response_code},
-											run_count = run_count + 1
-										where surrogate_id = {surrogate_id}
-									""")
-								else:
-									connection.execute(f"""
-										update webhook
-										set
-											status = '{status}',
-											updated_at = current_timestamp,
-											run_count = run_count + 1
-										where surrogate_id = {surrogate_id}
-									""")
-							except Exception as e:
-								logging.error(f"Error during webhook updates: {e}")
-						# Unlock webhook
-						WebhookService.release_webhook_lock(surrogate_id, connection)
+						webhook.status = status
+						webhook.updated_at = datetime.now()
+						webhook.run_count += 1
+
+						if response_code:
+							webhook.response_code = response_code
+
+					WebhookService.release_webhook_lock(surrogate_id, session)
+					session.commit()
+					return 1
+
+		except Exception:
+			tb = traceback.format_exc()
+			logging.error(tb)
+		finally:
+			session.close()
 
 	def fix_stuck_webhook_jobs(self):
 		logging.info("Starting fix_stuck_running_webhook_jobs")
-		session, engine = self.get_session_and_engine()
-		with engine.connect() as connection:
-			with connection.begin():
-				connection.execute(f"""
-						select pg_advisory_unlock(webhook.surrogate_id)
-						from webhook
-						where locked = true
-						and lock_date < current_timestamp - INTERVAL '1 MIN'
-					""")
+		session = SessionLocal()
+		try:
+			result = session.execute(f"""
+				SELECT surrogate_id FROM webhook
+				WHERE locked
+				and lock_date < current_timestamp - INTERVAL '1 MIN'
+				FOR UPDATE
+			""")
+			surrogate_id_list = [row[0] for row in result]
+			for surrogate_id in surrogate_id_list:
+				self.release_webhook_lock(surrogate_id, session)
+		except Exception:
+			tb = traceback.format_exc()
+			logging.error(tb)
+		finally:
+			session.close()
 
 	@staticmethod
 	def perform_request(webhook: Webhook, timeout: int):
@@ -166,22 +166,12 @@ class WebhookService:
 		return status_code
 
 	@staticmethod
-	def get_session_and_engine():
-		session: Session = SessionLocal()
-		engine: Engine = session.get_bind()
-		return session, engine
-
-	@staticmethod
-	def get_engine():
-		return create_engine(settings.POSTGRES_URI, pool_pre_ping=True)
-
-	@staticmethod
-	def attempt_webhook_lock(surrogate_id: int, connection):
+	def attempt_webhook_lock(surrogate_id: int, session):
 		logging.info(f"Starting attempt of lock: {surrogate_id}")
-		result = connection.execute(f"select pg_try_advisory_lock('{surrogate_id}')")
+		result = session.execute(f"select pg_try_advisory_lock('{surrogate_id}')")
 		is_leader = [row[0] for row in result][0]
 		if is_leader:
-			connection.execute(f"""
+			session.execute(f"""
 				update webhook
 				set
 					locked = true,
@@ -192,13 +182,13 @@ class WebhookService:
 		return is_leader
 
 	@staticmethod
-	def release_webhook_lock(surrogate_id: int, connection):
+	def release_webhook_lock(surrogate_id: int, session):
 		logging.info(f"Starting release of lock: {surrogate_id}")
-		connection.execute(f"""
+		session.execute(f"""
 			update webhook
 			set locked = false,
 				lock_date = null
 			where surrogate_id = {surrogate_id}
 		""")
-		connection.execute(f"select pg_advisory_unlock('{surrogate_id}')")
+		session.execute(f"select pg_advisory_unlock('{surrogate_id}')")
 		logging.info(f"released lock: {surrogate_id}")
