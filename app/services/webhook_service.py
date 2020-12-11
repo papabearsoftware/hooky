@@ -67,20 +67,28 @@ class WebhookService:
 		else:
 			raise ResourceNotFoundException("Webhook does not exist")
 
-
 	def process_ready_webhooks(self):
 		logging.info("Starting run_next_available_webhook")
 		session, engine = self.get_session_and_engine()
-		timeout = settings.REQUEST_TIMEOUT
+		timeout, max_webhook_error_count = settings.REQUEST_TIMEOUT, settings.MAX_WEBHOOK_ERROR_COUNT
 		with engine.connect() as connection:
 			with connection.begin():
-				result = connection.execute(f"select surrogate_id from webhook where status = 'READY'")
+				result = connection.execute(f"""
+					select surrogate_id
+					from webhook
+					where status = 'READY'
+					or (
+						status = 'ERROR'
+						and run_count < {max_webhook_error_count}
+						and DATE_PART('second', current_timestamp - created_at) > pow(2, run_count)
+					)
+				""")
 				webhook_surrogate_ids = [w[0] for w in result]
 				for surrogate_id in webhook_surrogate_ids:
 					if WebhookService.attempt_webhook_lock(surrogate_id, connection):
 						logging.info(f"processing webhook {surrogate_id}")
 						webhook = session.query(Webhook).filter(Webhook.surrogate_id == surrogate_id).one()
-						if webhook.status != StatusEnum.READY:
+						if webhook.status not in [StatusEnum.READY, StatusEnum.ERROR]:
 							logging.info(f"webhook: {surrogate_id} no longer ready")
 						else:
 							response_code = None
@@ -119,16 +127,8 @@ class WebhookService:
 	def fix_stuck_webhook_jobs(self):
 		logging.info("Starting fix_stuck_running_webhook_jobs")
 		session, engine = self.get_session_and_engine()
-		max_webhook_error_count = settings.MAX_WEBHOOK_ERROR_COUNT
 		with engine.connect() as connection:
 			with connection.begin():
-				connection.execute(f"""
-						update webhook
-						set status = 'READY'
-						where status = 'ERROR'
-						and run_count < {max_webhook_error_count}
-						and DATE_PART('second', current_timestamp - created_at) > pow(2, run_count)
-					""")
 				connection.execute(f"""
 						select pg_advisory_unlock(webhook.surrogate_id)
 						from webhook
@@ -138,14 +138,15 @@ class WebhookService:
 
 	@staticmethod
 	def perform_request(webhook: Webhook, timeout: int):
-		split_query_params = [split.split(":") for split in webhook.query_params.split(";")]
-		query_param_dict = {s[0]: s[1] for s in split_query_params}
 
-		split_headers = [split.split(":") for split in webhook.headers.split(";")]
-		headers = {s[0]: s[1] for s in split_headers}
+		split_headers = [split.split(":") for split in webhook.headers.split(";")] if len(webhook.headers) > 0 else []
+		headers = {s[0]: s[1] for s in split_headers} if split_headers else []
+
+		split_query_params = [split.split(":") for split in webhook.query_params.split(";")] if len(
+			webhook.query_params) > 0 else []
+		query_param_dict = {s[0]: s[1] for s in split_query_params} if split_query_params else []
 
 		if webhook.http_method == HttpMethodEnum.GET:
-
 			r = requests.get(webhook.url, headers=headers, params=query_param_dict, timeout=timeout)
 			status_code = r.status_code
 		elif webhook.http_method == HttpMethodEnum.POST:
@@ -164,6 +165,7 @@ class WebhookService:
 		else:
 			raise NotImplementedError
 
+		logging.info(f"performed {webhook.http_method} request with status {status_code}")
 		return status_code
 
 	@staticmethod
