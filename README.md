@@ -1,5 +1,6 @@
-# Instructions
+# Hooky
 
+## Instructions
 1. Add ./db/pg-data/ as shared docker resource
 2. Run docker-compose up
 3. Run cURL like so
@@ -25,3 +26,12 @@ curl -X "POST" "http://localhost:5001/api/v1/webhook" \
   ]
 }'
 ```
+
+## Postgres
+host: localhost
+
+port: 5432
+
+username: hooky
+
+password: P0stGr3$$
