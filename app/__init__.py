@@ -49,12 +49,12 @@ def run_jobs(flask_app):
     job_defaults = {
         'coalesce': False,
         'misfire_grace_time': 30,
-        'max_instances': 5
+        'max_instances': 3
     }
 
     scheduler = BackgroundScheduler(executors=executors, job_defaults=job_defaults)
-    scheduler.add_job(func=process_ready_webhook_jobs, trigger=IntervalTrigger(seconds=10))
-    scheduler.add_job(func=fix_stuck_running_webhook_jobs, trigger=IntervalTrigger(seconds=10))
+    scheduler.add_job(func=process_ready_webhook_jobs, trigger=IntervalTrigger(seconds=2))
+    scheduler.add_job(func=fix_stuck_running_webhook_jobs, trigger=IntervalTrigger(seconds=30))
 
     scheduler.start()
 
@@ -74,8 +74,6 @@ def create_app():
         register_errorhandlers(flask_app)
 
         Request.on_json_loading_failed = on_json_loading_failed
-
-        # TODO: Check connection health
 
         register_injections(flask_app)
 

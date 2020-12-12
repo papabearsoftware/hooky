@@ -1,6 +1,6 @@
 import logging
 
-from app.services.webhook_service import WebhookService
+from app.service.webhook_service import WebhookService
 
 logging.basicConfig(encoding='utf-8', level=logging.INFO)
 

@@ -1,5 +1,8 @@
 # Hooky
 
+## Demo
+Loom Video: https://www.loom.com/share/cc7d47cbcd8944b2bd7f2e0d706f4cf2
+
 ## Instructions
 1. Add ./db/pg-data/ as shared docker resource
 2. Run docker-compose up
