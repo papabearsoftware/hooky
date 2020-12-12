@@ -8,7 +8,7 @@ import requests
 from sqlalchemy.orm.exc import NoResultFound
 
 from app.model.webhook_model import Webhook, StatusEnum
-from app.schemas.webhook_schema import WebhookCreate, HttpMethodEnum, WebhookGet, Header, WebhookCreateResponse
+from app.schema.webhook_schema import WebhookCreate, HttpMethodEnum, WebhookGet, Header, WebhookCreateResponse
 from app.util.config import settings
 from app.util.exception import ResourceNotFoundException, ApiException
 from app.util.session import SessionLocal

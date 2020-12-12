@@ -4,8 +4,8 @@ from flask import Blueprint, request
 from injector import inject
 from pydantic import ValidationError
 
-from app.schemas.webhook_schema import WebhookCreate
-from app.services.webhook_service import WebhookService
+from app.schema.webhook_schema import WebhookCreate
+from app.service.webhook_service import WebhookService
 from app.util.config import settings
 from app.util.exception import BadRequestException
 
