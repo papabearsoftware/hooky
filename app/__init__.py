@@ -1,3 +1,4 @@
+import logging
 from logging import Logger
 
 from apscheduler.executors.pool import ThreadPoolExecutor
@@ -64,8 +65,12 @@ def run_jobs(flask_app):
 
 
 def create_app():
+
     """Returns an initialized Flask application."""
     # create console handler with a higher log level
+
+    logging.info("Starting app")
+
     flask_app = Flask(__name__)
     flask_app.url_map.strict_slashes = False
     if settings.RUN_ASYNC_JOBS:
