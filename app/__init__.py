@@ -8,6 +8,7 @@ from flask_injector import FlaskInjector
 from injector import Module
 
 from app.api.webhook_api import webhook_api
+from app.api.healthcheck import healthcheck_api
 from app.handler.job_handler import process_ready_webhook_jobs, fix_stuck_running_webhook_jobs
 from app.util.config import settings
 from app.util.exception import JSONParseException, ApiException, handle_exception, handle_api_exception
@@ -21,6 +22,7 @@ def on_json_loading_failed(self, e):
 def register_blueprints(flask_app):
     # Register the blueprints
     flask_app.register_blueprint(webhook_api)
+    flask_app.register_blueprint(healthcheck_api)
 
 
 def register_injections(flask_app):
