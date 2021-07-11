@@ -5,7 +5,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, Enum, BIGINT, Se
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 
-from app.schemas.webhook_schema import HttpMethodEnum, StatusEnum
+from app.schema.webhook_schema import HttpMethodEnum, StatusEnum
 
 Base = declarative_base()
 

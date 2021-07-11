@@ -1,0 +1,18 @@
+{
+    "cluster": "hooky-cluster-dev",
+    "serviceName": "rest-service",
+    "taskDefinition": "HookyRestTaskDefinition",
+    "loadBalancers": [
+        {
+            "targetGroupArn": "arn:aws:ecs:us-east-2:564630942712:task-definition/HookyRestTaskDefinition:3",
+            "containerName": "HookyTaskDefRest",
+            "containerPort": 5000
+        }
+    ],
+    "launchType": "EC2",
+    "schedulingStrategy": "REPLICA",
+    "deploymentController": {
+        "type": "CODE_DEPLOY"
+    },
+    "desiredCount": 2
+}

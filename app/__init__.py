@@ -1,3 +1,4 @@
+import logging
 from logging import Logger
 
 from apscheduler.executors.pool import ThreadPoolExecutor
@@ -7,6 +8,7 @@ from flask import Flask, Request
 from flask_injector import FlaskInjector
 from injector import Module
 
+from app.api.healthcheck_api import healthcheck_api
 from app.api.webhook_api import webhook_api
 from app.handler.job_handler import process_ready_webhook_jobs, fix_stuck_running_webhook_jobs
 from app.util.config import settings
@@ -21,6 +23,7 @@ def on_json_loading_failed(self, e):
 def register_blueprints(flask_app):
     # Register the blueprints
     flask_app.register_blueprint(webhook_api)
+    flask_app.register_blueprint(healthcheck_api)
 
 
 def register_injections(flask_app):
@@ -49,12 +52,12 @@ def run_jobs(flask_app):
     job_defaults = {
         'coalesce': False,
         'misfire_grace_time': 30,
-        'max_instances': 5
+        'max_instances': 3
     }
 
     scheduler = BackgroundScheduler(executors=executors, job_defaults=job_defaults)
-    scheduler.add_job(func=process_ready_webhook_jobs, trigger=IntervalTrigger(seconds=10))
-    scheduler.add_job(func=fix_stuck_running_webhook_jobs, trigger=IntervalTrigger(seconds=10))
+    scheduler.add_job(func=process_ready_webhook_jobs, trigger=IntervalTrigger(seconds=2))
+    scheduler.add_job(func=fix_stuck_running_webhook_jobs, trigger=IntervalTrigger(seconds=30))
 
     scheduler.start()
 
@@ -62,8 +65,12 @@ def run_jobs(flask_app):
 
 
 def create_app():
+
     """Returns an initialized Flask application."""
     # create console handler with a higher log level
+
+    logging.info("Starting app")
+
     flask_app = Flask(__name__)
     flask_app.url_map.strict_slashes = False
     if settings.RUN_ASYNC_JOBS:
@@ -74,8 +81,6 @@ def create_app():
         register_errorhandlers(flask_app)
 
         Request.on_json_loading_failed = on_json_loading_failed
-
-        # TODO: Check connection health
 
         register_injections(flask_app)
 

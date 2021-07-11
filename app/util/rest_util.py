@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 class CustomJSONEncoder(JSONEncoder):
     """
-    Custom encoder to serialize mongo objectids
+    Custom encoder for special serialization
     """
     def default(self, o):
         if isinstance(o, datetime):
